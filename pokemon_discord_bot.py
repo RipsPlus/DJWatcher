@@ -1,40 +1,50 @@
 import os
+import requests
 import discord
 from discord.ext import commands
-import requests
+from dotenv import load_dotenv
 
-# Environment variables
+load_dotenv()
+
 TOKEN = os.getenv("DISCORD_TOKEN")
 CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID"))
 
-# Discord intents and setup
 intents = discord.Intents.default()
 intents.message_content = True
-
 bot = commands.Bot(command_prefix="!", intents=intents)
-
-API_URL = "https://www.davidjones.com/api/catalogue/search?category=brand&brand=pokemon&rows=100&start=0"
 
 def fetch_pokemon_products():
     try:
-        response = requests.get(API_URL, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-        products = data.get("products", [])
-        return products
+        response = requests.get(
+            "https://www.davidjones.com/api/catalogue/search?category=brand&brand=pokemon&rows=100&start=0",
+            headers={"User-Agent": "Mozilla/5.0"},
+            timeout=10
+        )
+        if response.status_code == 200:
+            data = response.json()
+            return data.get("products", [])
+        else:
+            print(f"Error: Received status code {response.status_code}")
+            return None
     except Exception as e:
-        print(f"Error fetching products: {e}")
-        return []
+        print(f"Exception during fetch: {e}")
+        return None
 
 @bot.event
 async def on_ready():
-    print(f"✅ Logged in as {bot.user}")
+    print(f"✅ Logged in as {bot.user.name}")
 
 @bot.command(name="check")
 async def check_products(ctx):
     await ctx.send("🔎 Checking David Jones Pokémon products...")
 
     products = fetch_pokemon_products()
+
+    if products is None:
+        await ctx.send("⚠️ Failed to fetch data from API.")
+        return
+
+    await ctx.send(f"🔢 Products fetched from API: {len(products)}")
 
     if not products:
         await ctx.send("❌ No Pokémon products found.")
@@ -50,5 +60,4 @@ async def check_products(ctx):
     for msg in messages:
         await ctx.send(msg)
 
-# Run the bot
 bot.run(TOKEN)
