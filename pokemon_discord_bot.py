@@ -2,17 +2,29 @@ import os
 import discord
 from discord.ext import commands
 import requests
-from bs4 import BeautifulSoup
 
+# Environment variables
 TOKEN = os.getenv("DISCORD_TOKEN")
 CHANNEL_ID = int(os.getenv("DISCORD_CHANNEL_ID"))
 
+# Discord intents and setup
 intents = discord.Intents.default()
 intents.message_content = True
 
 bot = commands.Bot(command_prefix="!", intents=intents)
 
-PRODUCTS_URL = "https://www.davidjones.com/brand/pokemon?q=pokemon&redirect=1&search_category=search_suggestions"
+API_URL = "https://www.davidjones.com/api/catalogue/search?category=brand&brand=pokemon&rows=100&start=0"
+
+def fetch_pokemon_products():
+    try:
+        response = requests.get(API_URL, timeout=10)
+        response.raise_for_status()
+        data = response.json()
+        products = data.get("products", [])
+        return products
+    except Exception as e:
+        print(f"Error fetching products: {e}")
+        return []
 
 @bot.event
 async def on_ready():
@@ -20,29 +32,23 @@ async def on_ready():
 
 @bot.command(name="check")
 async def check_products(ctx):
-    if ctx.channel.id != CHANNEL_ID:
-        return
+    await ctx.send("🔎 Checking David Jones Pokémon products...")
 
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
+    products = fetch_pokemon_products()
 
-    response = requests.get(PRODUCTS_URL, headers=headers)
-    soup = BeautifulSoup(response.text, "html.parser")
-
-    items = soup.find_all("a", class_="product-tile")
-
-    if not items:
+    if not products:
         await ctx.send("❌ No Pokémon products found.")
         return
 
-    message_lines = ["**🎯 Current Pokémon Products:**\n"]
+    messages = []
+    for p in products:
+        name = p.get("productName", "Unnamed")
+        price = p.get("salePrice", "N/A")
+        url = "https://www.davidjones.com" + p.get("productUrl", "")
+        messages.append(f"**{name}** - ${price}\n<{url}>")
 
-    for item in items:
-        name = item.get("title", "Unnamed Product")
-        link = "https://www.davidjones.com" + item.get("href", "")
-        message_lines.append(f"- [{name}]({link})")
+    for msg in messages:
+        await ctx.send(msg)
 
-    await ctx.send("\n".join(message_lines)[:1999])
-
+# Run the bot
 bot.run(TOKEN)
